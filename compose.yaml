@@ -1,34 +1,70 @@
-version: "3.8"
-
+version: "3"
+# The parser will ignore extension fields prefixed with x-
 include:
-  - proxy.yaml
+  - path: ./proxy.yaml
+x-deploy: &deploy-dev
+  deploy:
+    resources:
+      limits:
+        cpus: "1"
+        memory: 512M
+      reservations:
+        memory: 256M
+x-env_file: &env_file
+  env_file:
+    - .env
+x-restart: &restart
+  restart: always #no, on-failure , always(default), unless-stopped
 
 services:
+  #------------------------------------
   web:
-    image: cr.yandex/crpl7lkpal0fsunb5es0/python:hello
-    restart:  always
+    depends_on:
+      - mysql
+    build:
+      context: .
+      dockerfile: ./Dockerfile.python
     networks:
       backend:
         ipv4_address: 172.20.0.5
-    ports:
-      - 5000:5000
-    env_file:
-      - .env
+    ports: ["5000"]
+    # ports:
+    #   - "127.0.0.1:5000:5000"
+    #  - "172.20.0.5:5000:5000"
+    <<: [*deploy-dev, *env_file, *restart]
     environment:
-      - DB_TABLE_NAME=requests
-      - DB_HOST=172.20.0.10
+      - DB_HOST=mysql
+      - DB_PORT=3306
       - DB_USER=${MYSQL_USER}
       - DB_PASSWORD=${MYSQL_PASSWORD}
       - DB_NAME=${MYSQL_DATABASE}
-      - default-authentication-plugin=mysql_native_password
+    links:
+      - mysql
 
-  db:
+  #-----------------------------------
+  mysql:
     image: mysql:8
-    restart: always
+    #command: "--default-authentication-plugin=mysql_native_password"
+    volumes:
+      - db_data:/var/lib/mysql
     networks:
       backend:
         ipv4_address: 172.20.0.10
-    ports:
-      - 3306:3306
-    env_file:
-      - .env
+    ports: ["3306:3306"]
+    # ports:
+    #   - "127.0.0.1:3306:3306"
+    #  - "172.20.0.10:3306:3306"
+    # expose:
+    #   - "3306"
+    <<: [*deploy-dev, *env_file, *restart]
+    environment:  
+    # Needs to create a fresh DB
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_ROOT_HOST="%" # Needs to get a root access via command line
+#--------------------------
+volumes:
+  db_data: {}
+  wp_data: {}
